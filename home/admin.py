@@ -1,30 +1,28 @@
-from django.contrib import admin
-from django.urls import path
-from django.utils.html import format_html
-
-# Register your models here.
-from .models import Label
-from django.http import HttpResponseRedirect
-from django.shortcuts import render
-from django.urls import reverse
-from django.http import HttpResponse
-from django.template.loader import render_to_string
-from .models import Label, Barcode
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
 import io
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+
+from django.contrib import admin
+from django.http import HttpResponse
+from django.urls import path
+# Register your models here.
+from django.urls import reverse
+from django.utils.html import format_html
 from reportlab.graphics.barcode import code128  # Import the barcode generator
 from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+
+from .models import Label, Barcode
 
 admin.site.site_header = "Accropoly Admin"
 admin.site.site_title = "Powered By Zapuza"
 admin.site.index_title = "Welcome to Accropoly Ninomiya Industries"
+
+
 @admin.register(Label)
 class LabelAdmin(admin.ModelAdmin):
     list_display = ('productName', 'productCode', 'unit', 'qty', 'print_label_button')
     actions = ['print_selected_labels']
+    search_fields = ['productCode']
 
     def get_urls(self):
         urls = super().get_urls()
@@ -65,25 +63,27 @@ class LabelAdmin(admin.ModelAdmin):
         return response
 
     def print_selected_labels(self, request, queryset):
-        # Response for the PDF
+        # Create a response for PDF download
         response = HttpResponse(content_type='application/pdf')
         response['Content-Disposition'] = 'inline; filename="selected_labels.pdf"'
 
         buffer = io.BytesIO()
 
-        label_width = 63 * 2.83
-        label_height = 10 * 2.83
-        spacing_between_labels = 1 * 2.83
-        page_width = label_width
-        total_height = label_height + spacing_between_labels
-        page_height = (label_height + spacing_between_labels) * queryset.count()
+        # Label dimensions in mm
+        label_width = 63 * mm  # approximately 63 mm
+        label_height = 10 * mm  # approximately 10 mm
 
-        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
+        # Create a PDF canvas with custom dimensions for each label page
+        p = canvas.Canvas(buffer, pagesize=(label_width, label_height))
 
-        for index, label in enumerate(queryset):
-            y_position = page_height - (index * total_height) - label_height
-            self.draw_label(p, label, 0, y_position, label_width, label_height)
+        # Loop through each label in queryset and print it on a separate page
+        for label in queryset:
+            # Draw label content on a new page
+            self.draw_label(p, label, 0, 0, label_width, label_height)
+            # Move to a new page after each label
+            p.showPage()
 
+        # Save the PDF content to the buffer
         p.save()
         pdf = buffer.getvalue()
         buffer.close()
@@ -91,23 +91,20 @@ class LabelAdmin(admin.ModelAdmin):
         return response
 
     def draw_label(self, p, label, x, y, width, height):
-        p.setLineWidth(0.5)
-        p.rect(x, y, width, height)
+        # Draw label content with proper formatting
+        p.setFont("Helvetica-Bold", 8)
+        p.drawCentredString(x + width / 2, y + height - 7, "ANIPL")  # Centered ANIPL at top
 
-        p.setFont("Helvetica-Bold", 6)
-        p.drawCentredString(width / 2, y + height - 7, "Accropoly Ninomiya Industries")
+        p.setFont("Helvetica", 6)  # Smaller font for product details
+        y_offset = y + height - 14  # Start below the header
 
-        p.setFont("Helvetica", 4)
-
-        y_offset = y + height - 14
-
-        p.drawString(x + 5, y_offset, f"Name: {label.productName}")
-        y_offset -= 4
-        p.drawString(x + 5, y_offset, f"Code: {label.productCode}")
-        y_offset -= 4
-        p.drawString(x + 5, y_offset, f"Unit: {label.unit}")
-        y_offset -= 4
-        p.drawString(x + 5, y_offset, f"Quantity: {label.qty}")
+        # Print each piece of label information
+        p.drawString(x + 5, y_offset, f"Desc: {label.productName}")
+        y_offset -= 6  # Move down for next line
+        p.drawString(x + 5, y_offset, f"Part No.: {label.productCode}")
+        y_offset -= 6
+        p.drawString(x + 5, y_offset, f"Dispatch Date: {label.unit}")
+        p.drawString(x + 100, y_offset, f"| Quantity: {label.qty}")
 
 @admin.register(Barcode)
 class BarcodeAdmin(admin.ModelAdmin):
@@ -130,6 +127,7 @@ class BarcodeAdmin(admin.ModelAdmin):
             '<a class="button" href="{}" target="_blank">Print Barcode</a>',
             reverse('admin:print-barcode', args=[obj.pk])
         )
+
     print_barcode_button.short_description = 'Print Barcode'
     print_barcode_button.allow_tags = True
 
@@ -140,11 +138,11 @@ class BarcodeAdmin(admin.ModelAdmin):
 
         buffer = io.BytesIO()
         barcode_width = 63 * mm
-        barcode_height = 10 * mm
+        barcode_height = 10 * mm  # You can change this value to adjust the height
 
         p = canvas.Canvas(buffer, pagesize=(barcode_width, barcode_height * 2))  # Double the height for 2 copies
 
-        for copy in range(2):
+        for copy in range(1):
             y_position = (2 - copy) * barcode_height - barcode_height
             self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
 
@@ -161,19 +159,21 @@ class BarcodeAdmin(admin.ModelAdmin):
 
         buffer = io.BytesIO()
 
+        # Set the custom page size to fit two copies of the barcode vertically
         barcode_width = 63 * mm
         barcode_height = 10 * mm
-        spacing_between_barcodes = 2 * mm
-        page_width = barcode_width
-        total_height = (barcode_height + spacing_between_barcodes) * queryset.count() * 2
-        page_height = total_height
+        page_height = barcode_height * 2  # Double the height to fit two copies on each page
 
-        p = canvas.Canvas(buffer, pagesize=(page_width, page_height))
+        p = canvas.Canvas(buffer, pagesize=(barcode_width, page_height))
 
-        for index, barcode in enumerate(queryset):
-            for copy in range(2):
-                y_position = page_height - (index * 2 + copy) * (barcode_height + spacing_between_barcodes) - barcode_height
-                self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
+        for barcode in queryset:
+            # Print two consecutive pages for each barcode
+            for _ in range(2):  # Loop to print the same barcode on two consecutive pages
+                for copy in range(2):
+                    y_position = (2 - copy) * barcode_height - barcode_height
+                    self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
+
+                p.showPage()
 
         p.save()
         pdf = buffer.getvalue()
@@ -183,11 +183,8 @@ class BarcodeAdmin(admin.ModelAdmin):
         return response
 
     def draw_barcode(self, p, barcode, x, y, width, height):
-        p.setLineWidth(0.5)
-        p.rect(x, y, width, height)
-
         barcode_width = width - 10 * mm
-        barcode_height = 6 * mm
+        barcode_height = height + 10  # Adjust to make the barcode height dynamic
 
         barcode_value = code128.Code128(
             barcode.value,
@@ -196,7 +193,7 @@ class BarcodeAdmin(admin.ModelAdmin):
         )
 
         barcode_x = x + (width - barcode_value.width) / 2
-        barcode_y = y + (height - barcode_height + 2) / 2
+        barcode_y = y + (height - barcode_height) / 3 - 15  # Centering the barcode vertically
 
         barcode_value.drawOn(p, barcode_x, barcode_y)
 
@@ -204,3 +201,5 @@ class BarcodeAdmin(admin.ModelAdmin):
 
         text_y = barcode_y - 2 * mm
         p.drawCentredString(x + width / 2, text_y, barcode.value)
+
+# ANIPL, Part Number, Desc, Qty, Dispatch Date
