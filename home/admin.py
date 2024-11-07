@@ -41,25 +41,14 @@ class LabelAdmin(admin.ModelAdmin):
         )
 
     def print_label(self, request, label_id, *args, **kwargs):
+        # Fetch the specific label by its ID
         label = Label.objects.get(pk=label_id)
-        response = HttpResponse(content_type='application/pdf')
-        response['Content-Disposition'] = 'inline; filename="label.pdf"'
 
-        buffer = io.BytesIO()
-        label_width = 63 * 2.83
-        label_height = 10 * 2.83
+        # Create a queryset with just this label to pass to the print_selected_labels function
+        queryset = Label.objects.filter(pk=label_id)
 
-        p = canvas.Canvas(buffer, pagesize=(label_width, label_height))
-
-        # Draw the label with the required spacing
-        self.draw_label(p, label, 0, 0, label_width, label_height)
-
-        p.save()
-        pdf = buffer.getvalue()
-        buffer.close()
-        response.write(pdf)
-
-        return response
+        # Call the print_selected_labels method, passing the queryset containing only this label
+        return self.print_selected_labels(request, queryset)
 
     def print_selected_labels(self, request, queryset):
         # Create a response for PDF download
@@ -68,9 +57,9 @@ class LabelAdmin(admin.ModelAdmin):
 
         buffer = io.BytesIO()
 
-        # Label dimensions in mm
-        label_width = 63 * mm  # approximately 63 mm
-        label_height = 10 * mm  # approximately 10 mm
+        # Label dimensions in mm (2 inches x 1 inch)
+        label_width = 50.8 * mm  # 2 inches
+        label_height = 25.4 * mm  # 1 inch
 
         # Create a PDF canvas with custom dimensions for each label page
         p = canvas.Canvas(buffer, pagesize=(label_width, label_height))
@@ -90,20 +79,36 @@ class LabelAdmin(admin.ModelAdmin):
         return response
 
     def draw_label(self, p, label, x, y, width, height):
-        # Draw label content with proper formatting
-        p.setFont("Helvetica-Bold", 8)
-        p.drawCentredString(x + width / 2, y + height - 7, "ANIPL")  # Centered ANIPL at top
+        # Set title font and center at the top
+        p.setFont("Helvetica-Bold", 10)
+        title = "ANIPL"
+        p.drawCentredString(x + width / 2, y + height - 10, title)  # Title centered at the top
 
-        p.setFont("Helvetica", 6)  # Smaller font for product details
-        y_offset = y + height - 14  # Start below the header
+        # Set smaller font for other details and center each line
+        p.setFont("Helvetica", 8)
 
-        # Print each piece of label information
+        # Calculate the total height for the content (leave some space between lines)
+        total_text_height = 5 * 10  # 5 lines of text, each with 10 units of height as an estimate
+        vertical_spacing = (height - total_text_height) / 25  # Distribute the remaining space
+
+        y_offset = y + height - 25  # Start below the title
+
+        # Left-align each piece of label information
         p.drawString(x + 5, y_offset, f"Desc: {label.productName}")
-        y_offset -= 6  # Move down for next line
+        y_offset -= (10 + vertical_spacing)  # Move down for the next line
+
         p.drawString(x + 5, y_offset, f"Part No.: {label.productCode}")
-        y_offset -= 6
+        y_offset -= (10 + vertical_spacing)
+
         p.drawString(x + 5, y_offset, f"Dispatch Date: {label.unit}")
-        p.drawString(x + 100, y_offset, f"| Quantity: {label.qty}")
+        y_offset -= (10 + vertical_spacing)
+
+        p.drawString(x + 5, y_offset, f"Quantity: {label.qty}")
+        y_offset -= (10 + vertical_spacing)
+
+        # Add random string after Part No. (you can replace with dynamic data)
+        random_string = f"PO: {label.poNumber}"
+        p.drawString(x + 5, y_offset, random_string)
 
 
 @admin.register(Barcode)
