@@ -10,12 +10,12 @@ from reportlab.graphics.barcode import code128  # Import the barcode generator
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
-from .models import Label, Barcode
+from .models import Label, Barcode, CustomLabel
 
 admin.site.site_header = "Accropoly Admin"
 admin.site.site_title = "Powered By Zapuza"
 admin.site.index_title = "Welcome to Accropoly Ninomiya Industries"
-
+from io import BytesIO
 
 @admin.register(Label)
 class LabelAdmin(admin.ModelAdmin):
@@ -195,3 +195,46 @@ class BarcodeAdmin(admin.ModelAdmin):
         p.drawCentredString(x + width / 2, text_y, barcode.value)
 
 # ANIPL, Part Number, Desc, Qty, Dispatch Date
+class CustomLabelAdmin(admin.ModelAdmin):
+    list_display = ('labelName',)  # You can add more fields as needed
+
+    # Action to print the label
+    def print_custom_label(self, request, queryset):
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = 'inline; filename="custom_label.pdf"'
+
+        buffer = BytesIO()
+        label_width = 200  # Width in points (adjust accordingly)
+        label_height = 100  # Height in points (adjust accordingly)
+
+        p = canvas.Canvas(buffer, pagesize=(label_width, label_height))
+
+        # Loop through selected CustomLabels
+        for custom_label in queryset:
+            label_name = custom_label.labelName
+            max_text_width = label_width - 20  # Leave some margin
+
+            # Calculate the font size dynamically based on the label width
+            text_width = p.stringWidth(label_name, "Helvetica-Bold", 10)
+            font_size = 18
+            while text_width > max_text_width and font_size > 4:
+                font_size -= 1
+                text_width = p.stringWidth(label_name, "Helvetica-Bold", font_size)
+
+            # Set font and draw centered label name
+            p.setFont("Helvetica-Bold", font_size)
+            p.drawCentredString(label_width / 2, label_height / 2, label_name)
+
+            p.showPage()
+
+        p.save()
+        pdf = buffer.getvalue()
+        buffer.close()
+        response.write(pdf)
+
+        return response
+
+    print_custom_label.short_description = "Print Custom Labels"
+    actions = ['print_custom_label']
+
+admin.site.register(CustomLabel, CustomLabelAdmin)

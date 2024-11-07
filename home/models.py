@@ -14,3 +14,5 @@ class Label(models.Model):
 
 class Barcode(models.Model):
     value = models.CharField(max_length=255)
+class CustomLabel(models.Model):
+    labelName = models.CharField(max_length=50, verbose_name="Desc")
