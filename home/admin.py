@@ -9,7 +9,6 @@ from django.utils.html import format_html
 from reportlab.graphics.barcode import code128  # Import the barcode generator
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
 
 from .models import Label, Barcode
 
@@ -106,6 +105,7 @@ class LabelAdmin(admin.ModelAdmin):
         p.drawString(x + 5, y_offset, f"Dispatch Date: {label.unit}")
         p.drawString(x + 100, y_offset, f"| Quantity: {label.qty}")
 
+
 @admin.register(Barcode)
 class BarcodeAdmin(admin.ModelAdmin):
     list_display = ('value', 'print_barcode_button')
@@ -165,15 +165,14 @@ class BarcodeAdmin(admin.ModelAdmin):
         page_height = barcode_height * 2  # Double the height to fit two copies on each page
 
         p = canvas.Canvas(buffer, pagesize=(barcode_width, page_height))
-
-        for barcode in queryset:
+        duplicated_barcodes = [barcode for barcode in queryset for _ in range(2)]
+        for barcode in duplicated_barcodes:
             # Print two consecutive pages for each barcode
-            for _ in range(2):  # Loop to print the same barcode on two consecutive pages
-                for copy in range(2):
-                    y_position = (2 - copy) * barcode_height - barcode_height
-                    self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
+            for copy in range(1):
+                y_position = (2 - copy) * barcode_height - barcode_height
+                self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
 
-                p.showPage()
+            p.showPage()
 
         p.save()
         pdf = buffer.getvalue()
