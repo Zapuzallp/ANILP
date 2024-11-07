@@ -132,26 +132,14 @@ class BarcodeAdmin(admin.ModelAdmin):
     print_barcode_button.allow_tags = True
 
     def print_barcode(self, request, barcode_id, *args, **kwargs):
+        # Retrieve the single Barcode object
         barcode = Barcode.objects.get(pk=barcode_id)
-        response = HttpResponse(content_type='application/pdf')
-        response['Content-Disposition'] = 'inline; filename="barcode.pdf"'
 
-        buffer = io.BytesIO()
-        barcode_width = 63 * mm
-        barcode_height = 10 * mm  # You can change this value to adjust the height
+        # Create a queryset that only includes this barcode
+        queryset = Barcode.objects.filter(pk=barcode_id)
 
-        p = canvas.Canvas(buffer, pagesize=(barcode_width, barcode_height * 2))  # Double the height for 2 copies
-
-        for copy in range(1):
-            y_position = (2 - copy) * barcode_height - barcode_height
-            self.draw_barcode(p, barcode, 0, y_position, barcode_width, barcode_height)
-
-        p.save()
-        pdf = buffer.getvalue()
-        buffer.close()
-        response.write(pdf)
-
-        return response
+        # Call print_selected_barcodes with the single-item queryset
+        return self.print_selected_barcodes(request, queryset)
 
     def print_selected_barcodes(self, request, queryset):
         response = HttpResponse(content_type='application/pdf')
